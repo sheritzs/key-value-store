@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"github.com/gorilla/mux"
 	"io"
 	"log"
@@ -61,12 +62,30 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+func getHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	key := vars["key"]
+
+	value, err := Get(key)
+	if errors.Is(err, ErrorNoSuchKey) {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprint(w, value) // Write the value to the response
+}
+
 func main() {
 	r := mux.NewRouter()
 
 	// Register putHandler as the handler function for PUT requests matching
 	// "v1/key/{key}"
 	r.HandleFunc("/v1/key/{key}", putHandler).Methods("PUT")
+	r.HandleFunc("/v1/key/{key}", getHandler).Methods("GET")
 
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
