@@ -9,6 +9,10 @@ import (
 	"net/http"
 )
 
+func notAllowedHandler(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "Not Allowed", http.StatusMethodNotAllowed)
+}
+
 // putHandler expects to be called with a PUT request for the
 // "v1/key/{key}" resource
 
@@ -54,6 +58,17 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, value) // Write the value to the response
 }
 
+func deleteHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	key := vars["key"]
+
+	err := Delete(key)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
 // Initialize FileTransactionLogger
 
 var logger TransactionLogger
@@ -96,6 +111,10 @@ func main() {
 	// "v1/key/{key}"
 	r.HandleFunc("/v1/key/{key}", putHandler).Methods("PUT")
 	r.HandleFunc("/v1/key/{key}", getHandler).Methods("GET")
+	r.HandleFunc("/v1/key/{key}", deleteHandler).Methods("DELETE")
+
+	r.HandleFunc("/v1", notAllowedHandler)
+	r.HandleFunc("/v1/key/{key}", notAllowedHandler)
 
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
