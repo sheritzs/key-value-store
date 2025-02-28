@@ -217,6 +217,41 @@ const (
 	EventPut
 )
 
+// Initialize FileTransactionLogger
+
+var logger TransactionLogger
+
+func initializeTransactionLog() error {
+	var err error
+
+	logger, err = NewFileTransactionLogger("transaction.log")
+	if err != nil {
+		return fmt.Errorf("failed to create event logger: %w", err)
+	}
+
+	events, errors := logger.ReadEvents()
+
+	e := Event{}
+	ok := true
+
+	for ok && err == nil {
+		select {
+		case err, ok = <-errors: // Retrieve any errors; ok = false if channel has
+		case e, ok = <-events: // been closed
+			switch e.EventType {
+			case EventDelete:
+				err = Delete(e.Key)
+			case EventPut:
+				err = Put(e.Key, e.Value)
+			}
+		}
+	}
+
+	logger.Run()
+
+	return err
+}
+
 func main() {
 	r := mux.NewRouter()
 
