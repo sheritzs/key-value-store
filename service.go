@@ -9,6 +9,15 @@ import (
 	"net/http"
 )
 
+var transact *TransactionLogger
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Println(r.Method, r.RequestURI)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func notAllowedHandler(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Not Allowed", http.StatusMethodNotAllowed)
 }
@@ -38,7 +47,11 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	transact.WritePut(key, string(value))
+
 	w.WriteHeader(http.StatusCreated)
+
+	log.Printf("PUT key=%s value=%s\n", key, string(value))
 }
 
 func getHandler(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +69,8 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprint(w, value) // Write the value to the response
+
+	log.Printf("GET key=%s\n", key)
 }
 
 func deleteHandler(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +82,10 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	transact.WriteDelete(key)
+
+	log.Printf("DELETE key=%s\n", key)
 }
 
 // Initialize FileTransactionLogger
@@ -105,10 +124,17 @@ func initializeTransactionLog() error {
 }
 
 func main() {
+	// Initializes the transaction log and loads existing data, if any.
+	// Blocks until all data is read
+	err := initializeTransactionLog()
+	if err != nil {
+		panic(err)
+	}
+
 	r := mux.NewRouter()
 
-	// Register putHandler as the handler function for PUT requests matching
-	// "v1/key/{key}"
+	r.Use(loggingMiddleware)
+
 	r.HandleFunc("/v1/key/{key}", putHandler).Methods("PUT")
 	r.HandleFunc("/v1/key/{key}", getHandler).Methods("GET")
 	r.HandleFunc("/v1/key/{key}", deleteHandler).Methods("DELETE")
