@@ -122,3 +122,48 @@ func (l *PostgresTransactionLogger) Run() {
 
 	}()
 }
+
+func (l *PostgresTransactionLogger) ReadEvents() (<-chan Event, <-chan error) {
+	outEvent := make(chan Event)    // An unbuffered Event channel
+	outError := make(chan error, 1) // A buffered error channel
+
+	go func() {
+		defer close(outEvent) // Close the channels when the goroutine ends
+		defer close(outError)
+
+		query := `SELECT sequence, event_type, key, value
+				  FROM transactions
+				  ORDER BY sequence`
+
+		rows, err := l.db.Query(query)
+		if err != nil {
+			outError <- fmt.Errorf("sql query error: %w", err)
+			return
+		}
+
+		defer rows.Close()
+
+		e := Event{}
+
+		for rows.Next() {
+
+			err = rows.Scan(
+				&e.Sequence, &e.EventType,
+				&e.Key, &e.Value)
+
+			if err != nil {
+				outError <- fmt.Errorf("error readingrow: %w", err)
+				return
+			}
+
+			outEvent <- e
+		}
+
+		err = rows.Err()
+		if err != nil {
+			outError <- fmt.Errorf("transaction log read failure: %w", err)
+		}
+	}()
+
+	return outEvent, outError
+}
